@@ -33,6 +33,11 @@ namespace JuegoEducativoYeisonHernandez
         private double uniquenessThreshold;
         private double hessianThresh;
         private long matchTime;
+        VectorOfKeyPoint currentVkp;
+        VectorOfVectorOfDMatch matches;
+        UMat currentDescriptors;
+        Mat mask;
+        Mat homography;
         #endregion
 
         public FrmPrincipal()
@@ -92,9 +97,9 @@ namespace JuegoEducativoYeisonHernandez
             picBoxReflejo.Image = mano;
             //Vector con los puntos claves del modelo == mano
             modelVkp = new VectorOfKeyPoint();
-            surf = new SURF(hessianThresh);
             //extrae las caract de la imagen modelo == mano:
             modelDescriptors = new UMat();
+            surf = new SURF(hessianThresh);
             //Leer descripción del metodo
             surf.DetectAndCompute(mano, null, modelVkp, modelDescriptors, false);
 
@@ -104,30 +109,32 @@ namespace JuegoEducativoYeisonHernandez
         {
             Stopwatch watch;
             //Vector con los puntos claves de la imagen actuald en la camara;
-            VectorOfKeyPoint observedVkp = new VectorOfKeyPoint();
+             currentVkp = new VectorOfKeyPoint();
             //Vector con los puntos donde se entrelazan los puntos del modelo y de la imagen en camara
-            VectorOfVectorOfDMatch matches = null;
+             matches = new VectorOfVectorOfDMatch();
             //Matriz con los puntos donde se entrelazan los puntos del modelo y de la imagen en camara
-            Mat mask;
-            Mat homography = new Mat();
+             mask = new Mat();
+             homography = new Mat();
 
             using (UMat uModelImage = mano.Mat.ToUMat(AccessType.Read))
             using (UMat uObservedImage = current.ToUMat(AccessType.Read))
             {
                 //Clase para extraer caracteristicas de una imagen
                 watch = Stopwatch.StartNew();
-
                 //extrae los datos de la imagen actual en camara
-                UMat observedDescriptors = new UMat();
-                surf.DetectAndCompute(current, null, observedVkp, observedDescriptors, false);
+                currentDescriptors = new UMat();
+                surf.DetectAndCompute(current, null, currentVkp, currentDescriptors, false);
                 //empieza el limbo xD
+
+
+
 
                 BFMatcher matcher = new BFMatcher(DistanceType.L2);
                 matcher.Add(modelDescriptors);
 
                 matches = new VectorOfVectorOfDMatch();
 
-                matcher.KnnMatch(observedDescriptors, matches, k, null);
+                matcher.KnnMatch(currentDescriptors, matches, k, null);
                 mask = new Mat(matches.Size, 1, DepthType.Cv8U, 1);
                 mask.SetTo(new MCvScalar(255));
 
@@ -136,19 +143,39 @@ namespace JuegoEducativoYeisonHernandez
                 int nonZero = CvInvoke.CountNonZero(mask);
                 if (nonZero > 4)
                 {
-                    nonZero = Features2DToolbox.VoteForSizeAndOrientation(modelVkp, observedVkp,
+                    nonZero = Features2DToolbox.VoteForSizeAndOrientation(modelVkp, currentVkp,
                        matches, mask, 1.5, 20);
                     if (nonZero >= 4)
-                        homography = Features2DToolbox.GetHomographyMatrixFromMatchedFeatures(modelVkp, observedVkp,
+                        homography = Features2DToolbox.GetHomographyMatrixFromMatchedFeatures(modelVkp, currentVkp,
                             matches, mask, 2);
                     // Features2DToolbox.DrawMatches(new Image<Gray, byte>(picBoxReflejo.Image.Bitmap), modelVkp, current, observedVkp, matches, homography, new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), mask);
+                    DrawMatches();
                 }
                 watch.Stop();
             }
-            matchTime = watch.ElapsedMilliseconds;
+            
+        }
+        //''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+        private void DrawMatches()
+        {
+            Mat result = new Mat();
+            Features2DToolbox.DrawMatches(mano, modelVkp, current, currentVkp, matches, result,new MCvScalar(255, 255, 255), new MCvScalar(255, 255, 255), mask);
+            if (homography != null)
+            {
+                Rectangle rect = new Rectangle(Point.Empty, current.Size);
+                PointF[] pts = new PointF[]
+             {
+                  new PointF(rect.Left, rect.Bottom),
+                  new PointF(rect.Right, rect.Bottom),
+                  new PointF(rect.Right, rect.Top),
+                  new PointF(rect.Left, rect.Top)
+             };
+                pts = CvInvoke.PerspectiveTransform(pts, homography);
+
+                Point[] points = Array.ConvertAll<PointF, Point>(pts, Point.Round);
+                //CvInvoke.Polylines(result, new VectorOfPoint(points), true,new MCvScalar(255, 0, 0255), 5);
+            }
         }
     }
-    //''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-
 }
 
